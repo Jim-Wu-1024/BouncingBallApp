@@ -4,24 +4,22 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.List;
 
-public class BallView extends JPanel{
-    private List<Ball> balls;
-    private int width ;
-    private int height;
 
-    public BallView(List<Ball> balls, int width, int height) {
+public class BallView extends JPanel {
+    private List<Ball> balls;
+
+    public BallView(List<Ball> balls) {
         this.balls = balls;
-        this.width = width;
-        this.height = height;
-        this.setPreferredSize(new Dimension(this.width, this.height));
     }
 
     @Override
-    public void paintComponent(Graphics g) {
+    protected void paintComponent(Graphics g) {
         super.paintComponent(g);
+        Graphics2D g2 = (Graphics2D) g;
+
         for (Ball ball : balls) {
-            g.setColor(ball.getColor());
-            g.fillOval(ball.getX(), ball.getY(), 2 * ball.getRadius(), 2 * ball.getRadius());
+            g2.setColor(ball.getColor());
+            g2.fillOval((int)ball.getX(), (int)ball.getY(), ball.getRadius() * 2, ball.getRadius() * 2);
         }
     }
 }
