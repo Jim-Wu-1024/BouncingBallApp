@@ -4,15 +4,19 @@ package jimwu.bouncingball;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 
 public class BallController implements ActionListener, MouseListener {
+    private List<Double> frameTimes = new ArrayList<>();
+    private BufferedWriter writer;
+
     private JFrame frame;
     private BallView ballPanel;
     private List<Ball> balls;
@@ -25,6 +29,9 @@ public class BallController implements ActionListener, MouseListener {
     private int WIDTH = 800;
     private int HEIGHT = 800;
 
+    private int numberOfBalls = 10; // Default number of balls
+    private int threadPoolSize = Runtime.getRuntime().availableProcessors(); // Default thread pool size
+
     public BallController() {
         initializeModel();
         initializeView();
@@ -34,12 +41,25 @@ public class BallController implements ActionListener, MouseListener {
         this.executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
     }
 
+    public BallController(int numberOfBalls, int threadPoolSize) {
+        this.numberOfBalls = numberOfBalls;
+        this.threadPoolSize = threadPoolSize;
+
+        initializeLogger();
+        initializeModel();
+        initializeView();
+        initializeController();
+
+        // Create a fixed thread pool with configurable size
+        this.executor = Executors.newFixedThreadPool(this.threadPoolSize);
+    }
+
     private void initializeModel() {
         balls = new ArrayList<>();
         Random rand = new Random();
         int radius = 16;
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < numberOfBalls; i++) {
             int x, y;
             boolean overlaps;
 
@@ -115,29 +135,70 @@ public class BallController implements ActionListener, MouseListener {
         timer.start();
     }
 
+    private void initializeLogger() {
+        String filename = String.format("%d_%d_frame_times.csv", threadPoolSize, numberOfBalls);
+        try {
+            writer = new BufferedWriter(new FileWriter(filename, true));
+            writer.write("ThreadPoolSize,NumberOfBalls,FrameTime(ms)\n");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void logFrameTime(double frameTime) {
+        synchronized (frameTimes) {
+            frameTimes.add(frameTime);
+            // Log the latest frame time
+            try {
+                writer.write(String.format("%d,%d,%.3f\n", threadPoolSize, numberOfBalls, frameTime));
+                writer.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
     private void update() {
+        long startTime = System.nanoTime();
         Rectangle bounds = ballPanel.getBounds();
 
         // Submit move tasks for each ball
+        List<Callable<Void>> moveTasks = new ArrayList<>();
         for (Ball ball : balls) {
-            executor.submit(() -> {
+            moveTasks.add(() -> {
                 synchronized (ball) { // Synchronize on the ball to prevent concurrent modifications
                     ball.move(bounds);
                 }
+                return null;
             });
         }
 
-        executor.submit(() -> {
-            try {
-                // Use a barrier or other synchronization method if necessary
-                // For simplicity, assuming all move tasks are quick and collisions can be handled immediately
-                handleCollisions();
-                // Repaint should be done on the Event Dispatch Thread
-                SwingUtilities.invokeLater(() -> ballPanel.repaint());
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        // Submit all move tasks and wait for completion
+        try {
+            executor.invokeAll(moveTasks);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        // Handle collisions in a separate task
+        Future<?> collisionFuture = executor.submit(() -> {
+            handleCollisions();
+            // Repaint should be done on the Event Dispatch Thread
+            SwingUtilities.invokeLater(() -> ballPanel.repaint());
         });
+
+        // Wait for collision handling to complete
+        try {
+            collisionFuture.get();
+        } catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+        }
+
+        long endTime = System.nanoTime();
+        long frameTime = endTime - startTime;
+
+        // Log or store frameTime for analysis
+        logFrameTime(frameTime / 1_000_000.0);
     }
 
     private void exitApplication() {

@@ -1,1 +1,1 @@
-### This is Bouncing Ball Initial Implementation
+### Experiment with the size of the thread pool and the number of balls
