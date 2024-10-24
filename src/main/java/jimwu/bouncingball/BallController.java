@@ -136,7 +136,7 @@ public class BallController implements ActionListener, MouseListener {
     }
 
     private void initializeLogger() {
-        String filename = String.format("%d_%d_frame_times.csv", threadPoolSize, numberOfBalls);
+        String filename = String.format("./data/%d_%d_frame_times.csv", threadPoolSize, numberOfBalls);
         try {
             writer = new BufferedWriter(new FileWriter(filename, true));
             writer.write("ThreadPoolSize,NumberOfBalls,FrameTime(ms)\n");
@@ -181,23 +181,6 @@ public class BallController implements ActionListener, MouseListener {
             e.printStackTrace();
         }
 
-//        // Handle collisions in a separate task
-//        Future<?> collisionFuture = executor.submit(() -> {
-//            handleCollisions();
-//            // Repaint should be done on the Event Dispatch Thread
-//            SwingUtilities.invokeLater(() -> ballPanel.repaint());
-//        });
-//
-//        // Wait for collision handling to complete
-//        try {
-//            collisionFuture.get();
-//        } catch (InterruptedException | ExecutionException e) {
-//            e.printStackTrace();
-//        }
-
-
-//        handleCollisions();
-
         // Schedule repaint on the Event Dispatch Thread
         SwingUtilities.invokeLater(() -> ballPanel.repaint());
 
@@ -227,59 +210,6 @@ public class BallController implements ActionListener, MouseListener {
 
         frame.dispose(); // Close the application window
         System.exit(0);  // Terminate the program completely
-    }
-
-//    private void handleCollisions() {
-//        int size = balls.size();
-//        for (int i = 0; i < size; i++) {
-//            Ball ballA = balls.get(i);
-//            for (int j = i + 1; j < size; j++) {
-//                Ball ballB = balls.get(j);
-//                double dx = ballB.getX() - ballA.getX();
-//                double dy = ballB.getY() - ballA.getY();
-//                double distance = Math.hypot(dx, dy);
-//                double minDist = ballA.getRadius() * 2;
-//
-//                if (distance < minDist) {
-//                    resolveCollision(ballA, ballB);
-//                }
-//            }
-//        }
-//    }
-
-    private void handleCollisions() {
-        int numTasks = 4; // Number of parallel tasks for collision handling
-        List<Callable<Void>> collisionTasks = new ArrayList<>();
-        int chunkSize = balls.size() / numTasks;
-
-        for (int i = 0; i < numTasks; i++) {
-            final int start = i * chunkSize;
-            final int end = (i == numTasks - 1) ? balls.size() : (i + 1) * chunkSize;
-
-            collisionTasks.add(() -> {
-                for (int j = start; j < end; j++) {
-                    for (int k = j + 1; k < balls.size(); k++) {
-                        Ball ball1 = balls.get(j);
-                        Ball ball2 = balls.get(k);
-                        if (isColliding(ball1, ball2)) {
-                            synchronized (ball1) {
-                                synchronized (ball2) {
-                                    resolveCollision(ball1, ball2);
-                                }
-                            }
-                        }
-                    }
-                }
-                return null;
-            });
-        }
-
-        // Execute collision tasks in parallel
-        try {
-            executor.invokeAll(collisionTasks);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
     }
 
     // Handle interactions for a single ball
