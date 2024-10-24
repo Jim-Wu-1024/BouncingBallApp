@@ -2,6 +2,7 @@ package jimwu.bouncingball;
 
 import java.awt.*;
 
+// Ball Model
 public class Ball {
     private double x, y;;
     private int radius;

@@ -4,7 +4,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.List;
 
-
+// Ball View
 public class BallView extends JPanel {
     private List<Ball> balls;
 

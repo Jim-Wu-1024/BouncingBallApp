@@ -4,8 +4,8 @@ import javax.swing.*;
 
 public class App {
     public static void main(String[] args) {
-        int numBalls = 400;
-        int poolSize = 32;
+        int numBalls = 100;
+        int poolSize = 8;
 
         if (args.length >= 1) {
             try {

@@ -166,9 +166,10 @@ public class BallController implements ActionListener, MouseListener {
         List<Callable<Void>> moveTasks = new ArrayList<>();
         for (Ball ball : balls) {
             moveTasks.add(() -> {
-                synchronized (ball) { // Synchronize on the ball to prevent concurrent modifications
-                    ball.move(bounds);
-                }
+                ball.move(bounds);
+                // Handle interactions (collisions, etc.) with other balls
+                handleInteractions(ball);
+
                 return null;
             });
         }
@@ -180,19 +181,25 @@ public class BallController implements ActionListener, MouseListener {
             e.printStackTrace();
         }
 
-        // Handle collisions in a separate task
-        Future<?> collisionFuture = executor.submit(() -> {
-            handleCollisions();
-            // Repaint should be done on the Event Dispatch Thread
-            SwingUtilities.invokeLater(() -> ballPanel.repaint());
-        });
+//        // Handle collisions in a separate task
+//        Future<?> collisionFuture = executor.submit(() -> {
+//            handleCollisions();
+//            // Repaint should be done on the Event Dispatch Thread
+//            SwingUtilities.invokeLater(() -> ballPanel.repaint());
+//        });
+//
+//        // Wait for collision handling to complete
+//        try {
+//            collisionFuture.get();
+//        } catch (InterruptedException | ExecutionException e) {
+//            e.printStackTrace();
+//        }
 
-        // Wait for collision handling to complete
-        try {
-            collisionFuture.get();
-        } catch (InterruptedException | ExecutionException e) {
-            e.printStackTrace();
-        }
+
+//        handleCollisions();
+
+        // Schedule repaint on the Event Dispatch Thread
+        SwingUtilities.invokeLater(() -> ballPanel.repaint());
 
         long endTime = System.nanoTime();
         long frameTime = endTime - startTime;
@@ -222,22 +229,92 @@ public class BallController implements ActionListener, MouseListener {
         System.exit(0);  // Terminate the program completely
     }
 
-    private void handleCollisions() {
-        int size = balls.size();
-        for (int i = 0; i < size; i++) {
-            Ball ballA = balls.get(i);
-            for (int j = i + 1; j < size; j++) {
-                Ball ballB = balls.get(j);
-                double dx = ballB.getX() - ballA.getX();
-                double dy = ballB.getY() - ballA.getY();
-                double distance = Math.hypot(dx, dy);
-                double minDist = ballA.getRadius() * 2;
+//    private void handleCollisions() {
+//        int size = balls.size();
+//        for (int i = 0; i < size; i++) {
+//            Ball ballA = balls.get(i);
+//            for (int j = i + 1; j < size; j++) {
+//                Ball ballB = balls.get(j);
+//                double dx = ballB.getX() - ballA.getX();
+//                double dy = ballB.getY() - ballA.getY();
+//                double distance = Math.hypot(dx, dy);
+//                double minDist = ballA.getRadius() * 2;
+//
+//                if (distance < minDist) {
+//                    resolveCollision(ballA, ballB);
+//                }
+//            }
+//        }
+//    }
 
-                if (distance < minDist) {
-                    resolveCollision(ballA, ballB);
+    private void handleCollisions() {
+        int numTasks = 4; // Number of parallel tasks for collision handling
+        List<Callable<Void>> collisionTasks = new ArrayList<>();
+        int chunkSize = balls.size() / numTasks;
+
+        for (int i = 0; i < numTasks; i++) {
+            final int start = i * chunkSize;
+            final int end = (i == numTasks - 1) ? balls.size() : (i + 1) * chunkSize;
+
+            collisionTasks.add(() -> {
+                for (int j = start; j < end; j++) {
+                    for (int k = j + 1; k < balls.size(); k++) {
+                        Ball ball1 = balls.get(j);
+                        Ball ball2 = balls.get(k);
+                        if (isColliding(ball1, ball2)) {
+                            synchronized (ball1) {
+                                synchronized (ball2) {
+                                    resolveCollision(ball1, ball2);
+                                }
+                            }
+                        }
+                    }
+                }
+                return null;
+            });
+        }
+
+        // Execute collision tasks in parallel
+        try {
+            executor.invokeAll(collisionTasks);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Handle interactions for a single ball
+    private void handleInteractions(Ball currentBall) {
+        for (Ball otherBall : balls) {
+            if (currentBall != otherBall) {
+                // Check if there is a collision
+                if (isColliding(currentBall, otherBall)) {
+                    // Ensure consistent locking order to prevent deadlocks
+                    Ball first, second;
+                    if (System.identityHashCode(currentBall) < System.identityHashCode(otherBall)) {
+                        first = currentBall;
+                        second = otherBall;
+                    } else {
+                        first = otherBall;
+                        second = currentBall;
+                    }
+
+                    // Lock both balls to avoid race conditions
+                    synchronized (first) {
+                        synchronized (second) {
+                            resolveCollision(currentBall, otherBall);
+                        }
+                    }
                 }
             }
         }
+    }
+
+    private boolean isColliding(Ball ball1, Ball ball2) {
+        double dx = ball2.getX() - ball1.getX();
+        double dy = ball2.getY() - ball1.getY();
+        double distance = Math.hypot(dx, dy);
+        double minDist = ball1.getRadius() * 2;
+        return distance < minDist;
     }
 
     private void resolveCollision(Ball ballA, Ball ballB) {
